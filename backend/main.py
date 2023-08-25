@@ -3,7 +3,8 @@ import os
 import openai
 import requests
 import json
-
+os.environ["OPENAI_API_KEY"] = 'replace with your key'
+os.environ["GOOGLE_MAPS_API_KEY"] = 'replace with your key'
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 app = Flask(__name__, static_url_path='', static_folder='../frontend/dist')
@@ -35,79 +36,85 @@ def serve():
 
 @app.route('/api/completions', methods=["POST"])
 def completions():
-  data = request.get_json()
-  app.logger.info("Starting call")
-  messages = [{
-    "role":
-    "system",
-    "content":
-    """You are a helpful assistant that takes some details about some work that needs to be done and fills out a work ticket so that work can be done.
+  try:
+    data = request.get_json()
+    app.logger.info("Starting call")
+    print("Inside Completion")
+    messages = [{
+      "role":
+      "system",
+      "content":
+      """You are a helpful assistant that takes some details about some work that needs to be done and fills out a work ticket so that work can be done.
 
-To do this you take the work details given and you do a few things:
- - You fix any mistakes in them.
- - You make them clearer to read
- - You add details to them like the correct address of the work
- - You add details to the ticket about what tools or parts might be needed
- - You add details to the ticket about the estimated time of completion
- - You add details to the ticket with the managers name and contact information
- - You add details to the ticket about hours of operation 
- - You add details to the ticket about parking at the location
- - You add details to the ticket about access information and contact info
- - You add details to the ticket about what experience or credentials someone doing the work might need"""
-  }, {
-    "role": "user",
-    "content": data.get('query')
-  }]
+  To do this you take the work details given and you do a few things:
+  - You fix any mistakes in them.
+  - You make them clearer to read
+  - You add details to them like the correct address of the work
+  - You add details to the ticket about what tools or parts might be needed
+  - You add details to the ticket about the estimated time of completion
+  - You add details to the ticket with the managers name and contact information
+  - You add details to the ticket about hours of operation 
+  - You add details to the ticket about parking at the location
+  - You add details to the ticket about access information and contact info
+  - You add details to the ticket about what experience or credentials someone doing the work might need"""
+    }, {
+      "role": "user",
+      "content": data.get('query')
+    }]
 
-  completion = openai.ChatCompletion.create(
-    model="gpt-4-0613",
-    messages=messages,
-    functions=[{
-      "name": "geocode",
-      "description": "Get the address for a given location",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "location": {
-            "type": "string",
-            "description": "The city and state, e.g. San Francisco, CA",
-          }
-        },
-        "required": ["location"],
-      },
-    }])
-  response_message = completion.choices[0].message
-  app.logger.info("Response: %s", response_message)
-
-  # Step 2: check if GPT wanted to call a function
-  if response_message.get("function_call"):
-    # Step 3: call the function
-    # Note: the JSON response may not always be valid; be sure to handle errors
-    available_functions = {
-      "geocode": geocode,
-    }  # only one function in this example, but you can have multiple
-    function_name = response_message["function_call"]["name"]
-    fuction_to_call = available_functions[function_name]
-    function_args = json.loads(response_message["function_call"]["arguments"])
-    function_response = fuction_to_call(
-      location=function_args.get("location"), )
-
-    # Step 4: send the info on the function call and function response to GPT
-    messages.append(
-      response_message)  # extend conversation with assistant's reply
-    messages.append({
-      "role": "function",
-      "name": function_name,
-      "content": function_response,
-    })  # extend conversation with function response
-    second_response = openai.ChatCompletion.create(
+    completion = openai.ChatCompletion.create(
       model="gpt-4-0613",
       messages=messages,
-    )  # get a new response from GPT where it can see the function response
-    # return second_response
+      functions=[{
+        "name": "geocode",
+        "description": "Get the address for a given location",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "location": {
+              "type": "string",
+              "description": "The city and state, e.g. San Francisco, CA",
+            }
+          },
+          "required": ["location"],
+        },
+      }])
+    response_message = completion.choices[0].message
+    app.logger.info("Response: %s", response_message)
 
-  print("Second Response: %s", second_response)
-  return jsonify(message=second_response.choices[0].message)
+    # Step 2: check if GPT wanted to call a function
+    if response_message.get("function_call"):
+      # Step 3: call the function
+      # Note: the JSON response may not always be valid; be sure to handle errors
+      available_functions = {
+        "geocode": geocode,
+      }  # only one function in this example, but you can have multiple
+      function_name = response_message["function_call"]["name"]
+      fuction_to_call = available_functions[function_name]
+      function_args = json.loads(response_message["function_call"]["arguments"])
+      function_response = fuction_to_call(
+        location=function_args.get("location"), )
+
+      # Step 4: send the info on the function call and function response to GPT
+      messages.append(
+        response_message)  # extend conversation with assistant's reply
+      messages.append({
+        "role": "function",
+        "name": function_name,
+        "content": function_response,
+      })  # extend conversation with function response
+      second_response = openai.ChatCompletion.create(
+        model="gpt-4-0613",
+        messages=messages,
+      )  # get a new response from GPT where it can see the function response
+      # return second_response
+
+      print("Second Response: %s", second_response.choices[0].message)
+      return jsonify(message=second_response.choices[0].message)
+    else:
+      return jsonify(message=response_message)
+  except Exception as e:
+    print("Error---",e)
 
 
-app.run(host='0.0.0.0', port=81, debug=False)
+app.run(host='0.0.0.0', port=5000, debug=False)
